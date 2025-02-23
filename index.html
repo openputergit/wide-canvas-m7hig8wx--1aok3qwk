@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocBot - Medical Appointment Scheduler</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #f0f0f0;
+        }
+        .neubrutalism {
+            border: 3px solid #000;
+            box-shadow: 5px 5px 0px #000;
+            transition: all 0.2s ease;
+        }
+        .neubrutalism:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 7px 7px 0px #000;
+        }
+        .chat-container {
+            height: calc(100vh - 200px);
+        }
+        .loading-dots::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80% { content: '...'; }
+        }
+        .message-appear {
+            animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div id="app" class="max-w-4xl mx-auto">
+        <div class="neubrutalism bg-[#FF90BC] p-6 mb-8 rounded-lg">
+            <h1 class="text-3xl font-bold text-black">DocBot <i class="bi bi-robot"></i></h1>
+            <p class="text-black mt-2">Your friendly medical appointment assistant</p>
+        </div>
+
+        <div class="neubrutalism bg-white p-4 rounded-lg">
+            <div class="chat-container overflow-y-auto mb-4" ref="chatContainer">
+                <div v-for="(message, index) in messages" :key="index" class="message-appear mb-4">
+                    <div :class="message.type === 'user' ? 'ml-auto bg-[#FF90BC]' : 'mr-auto bg-[#FFC0D9]'" 
+                         class="neubrutalism max-w-[80%] p-3 rounded-lg">
+                        <p class="text-black">{{ message.text }}</p>
+                        <img v-if="message.imageUrl" :src="message.imageUrl" class="mt-2 max-w-full rounded-lg">
+                    </div>
+                </div>
+                <div v-if="isLoading" class="mr-auto bg-[#FFC0D9] neubrutalism max-w-[80%] p-3 rounded-lg">
+                    <p class="loading-dots">Thinking</p>
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <input type="file" ref="fileInput" @change="handleFileUpload" class="hidden" accept="image/*,.pdf">
+                <button @click="$refs.fileInput.click()" class="neubrutalism bg-[#C683D7] text-black px-4 py-2 rounded-lg">
+                    <i class="bi bi-paperclip"></i>
+                </button>
+                <input v-model="userInput" @keyup.enter="sendMessage" 
+                       class="neubrutalism flex-1 px-4 py-2 rounded-lg bg-white"
+                       placeholder="Type your message...">
+                <button @click="sendMessage" class="neubrutalism bg-[#FF90BC] text-black px-6 py-2 rounded-lg">
+                    <i class="bi bi-send"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    messages: [],
+                    userInput: '',
+                    isLoading: false,
+                    currentStep: 'greeting',
+                    appointmentDetails: {
+                        name: '',
+                        doctor: '',
+                        type: '',
+                        date: '',
+                        time: ''
+                    }
+                }
+            },
+            mounted() {
+                this.addBotMessage("Hi! I'm DocBot 👋 I'm here to help you schedule your doctor's appointment. What's your name?")
+            },
+            methods: {
+                async sendMessage() {
+                    if (!this.userInput.trim()) return
+
+                    // Add user message
+                    this.addUserMessage(this.userInput)
+                    const userInput = this.userInput
+                    this.userInput = ''
+                    
+                    this.isLoading = true
+                    await this.processUserInput(userInput)
+                    this.isLoading = false
+
+                    this.$nextTick(() => {
+                        this.scrollToBottom()
+                    })
+                },
+
+                async processUserInput(input) {
+                    switch(this.currentStep) {
+                        case 'greeting':
+                            this.appointmentDetails.name = input
+                            this.currentStep = 'appointment_type'
+                            await this.delay(1000)
+                            this.addBotMessage(`Nice to meet you, ${input}! What type of appointment do you need? (e.g., general check-up, specialist consultation)`)
+                            break
+
+                        case 'appointment_type':
+                            this.appointmentDetails.type = input
+                            this.currentStep = 'doctor_preference'
+                            await this.delay(1000)
+                            this.addBotMessage("Do you have a preferred doctor? If yes, please provide their name. If not, just type 'no'.")
+                            break
+
+                        case 'doctor_preference':
+                            this.appointmentDetails.doctor = input
+                            this.currentStep = 'date_time'
+                            await this.delay(1000)
+                            this.addBotMessage("What date and time would you prefer for your appointment? (e.g., 'tomorrow at 2pm' or 'next Monday morning')")
+                            break
+
+                        case 'date_time':
+                            this.appointmentDetails.date = input
+                            this.currentStep = 'confirmation'
+                            await this.delay(1000)
+                            this.addBotMessage(`Great! Here's a summary of your appointment:
+                                \nName: ${this.appointmentDetails.name}
+                                \nType: ${this.appointmentDetails.type}
+                                \nDoctor: ${this.appointmentDetails.doctor}
+                                \nRequested Time: ${this.appointmentDetails.date}
+                                \nIs this correct? (yes/no)`)
+                            break
+
+                        case 'confirmation':
+                            if (input.toLowerCase().includes('yes')) {
+                                await this.delay(1000)
+                                this.addBotMessage("Perfect! Your appointment has been scheduled. You'll receive a confirmation email shortly. Need anything else?")
+                                this.currentStep = 'complete'
+                            } else {
+                                this.currentStep = 'greeting'
+                                await this.delay(1000)
+                                this.addBotMessage("Let's start over. What's your name?")
+                            }
+                            break
+
+                        case 'complete':
+                            await this.delay(1000)
+                            this.addBotMessage("Is there anything else I can help you with?")
+                            break
+                    }
+                },
+
+                async handleFileUpload(event) {
+                    const file = event.target.files[0]
+                    if (!file) return
+
+                    this.isLoading = true
+                    
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    formData.append('userId', 'user123')
+                    formData.append('appSlug', 'docbot-123')
+
+                    try {
+                        const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/storage/upload', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'Bearer BVbxmW7tywZjt0qFxNfTRS2QTmi2'
+                            },
+                            body: formData
+                        })
+
+                        const data = await response.json()
+                        
+                        if (data.success) {
+                            this.addUserMessage('Uploaded file', data.url)
+                            
+                            // Analyze the image using AI
+                            const aiResponse = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/ai', {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': 'Bearer BVbxmW7tywZjt0qFxNfTRS2QTmi2',
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    messages: [{
+                                        role: 'user',
+                                        content: [
+                                            { type: 'text', text: 'Please analyze this medical document and extract any relevant information about appointments, doctors, or medical conditions.' },
+                                            { type: 'image_url', image_url: { url: data.url } }
+                                        ]
+                                    }]
+                                })
+                            })
+
+                            const aiData = await aiResponse.json()
+                            await this.delay(1000)
+                            this.addBotMessage("I've analyzed your document. " + aiData.message)
+                        }
+                    } catch (error) {
+                        console.error('Error:', error)
+                        this.addBotMessage("Sorry, I couldn't process that file. Could you try again?")
+                    }
+
+                    this.isLoading = false
+                },
+
+                addUserMessage(text, imageUrl = null) {
+                    this.messages.push({ type: 'user', text, imageUrl })
+                },
+
+                addBotMessage(text, imageUrl = null) {
+                    this.messages.push({ type: 'bot', text, imageUrl })
+                },
+
+                scrollToBottom() {
+                    const container = this.$refs.chatContainer
+                    container.scrollTop = container.scrollHeight
+                },
+
+                delay(ms) {
+                    return new Promise(resolve => setTimeout(resolve, ms))
+                }
+            }
+        }).mount('#app')
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
